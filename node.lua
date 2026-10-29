@@ -661,13 +661,14 @@ end
 
 -- Cartouche blanc de taille fixe, colle au bord droit, coins gauches arrondis,
 -- centre entre le haut de l'ecran et le bandeau ; le texte bleu s'adapte
--- (3 lignes au plus). Plusieurs messages actifs : un toutes les 8 secondes.
+-- (3 lignes au plus). Plusieurs messages actifs : un toutes les 8 secondes,
+-- avec un fondu enchaine entre deux messages.
 local DUREE_MESSAGE = 8
+local FONDU_MESSAGE = 0.8
 
 local function afficher_message(cote, bandeau_haut, jour)
   local actifs = messages_du_jour(jour)
   if #actifs == 0 then return end
-  local texte = actifs[math.floor(sys.now() / DUREE_MESSAGE) % #actifs + 1]
 
   local larg = cote * 0.97
   local x    = WIDTH - larg
@@ -676,11 +677,24 @@ local function afficher_message(cote, bandeau_haut, jour)
   local haut = bandeau_haut - 2 * y
   cartouche_gauche(x, y, WIDTH, y + haut, BLANC, math.min(haut * 0.18, HEIGHT * 0.04))
 
-  local m = mise_en_page_message(texte, larg, haut, pad)
-  local bloc = #m.lignes * m.taille * 1.15
-  local y0 = y + (haut - bloc) / 2
-  for i, l in ipairs(m.lignes) do
-    centre(l, x + larg / 2, y0 + (i - 0.5) * m.taille * 1.15, m.taille, BLEU)
+  local function ecrire_message(texte, a)
+    local m = mise_en_page_message(texte, larg, haut, pad)
+    local bloc = #m.lignes * m.taille * 1.15
+    local y0 = y + (haut - bloc) / 2
+    for i, l in ipairs(m.lignes) do
+      centre(l, x + larg / 2, y0 + (i - 0.5) * m.taille * 1.15, m.taille, BLEU, a)
+    end
+  end
+
+  local n = #actifs
+  local tour = math.floor(sys.now() / DUREE_MESSAGE)
+  local t = (sys.now() - tour * DUREE_MESSAGE) / FONDU_MESSAGE
+  local actuel = actifs[tour % n + 1]
+  if n > 1 and t < 1 then
+    ecrire_message(actifs[(tour - 1) % n + 1], 1 - t)
+    ecrire_message(actuel, t)
+  else
+    ecrire_message(actuel, 1)
   end
 end
 

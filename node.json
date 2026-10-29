@@ -103,14 +103,12 @@
           "title": "Début d'affichage",
           "name": "debut",
           "type": "date",
-          "default": "utc-now",
           "allow_empty": true
         },
         {
           "title": "Fin d'affichage",
           "name": "fin",
           "type": "date",
-          "default": "",
           "allow_empty": true
         }
       ]
