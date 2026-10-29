@@ -1,0 +1,10 @@
+{
+  "name": "Horloge météo Leclerc V2",
+  "author": "gaetanchristophe-commits",
+  "desc": "Horloge à aiguilles et afficheur LED avec météo, alertes et message, aux couleurs E.Leclerc",
+  "platforms": ["pi/epoch-1", "pi/epoch-2"],
+  "offline": {
+    "support": "yes",
+    "info": "L'horloge fonctionne sans Internet ; la météo nécessite une connexion"
+  }
+}

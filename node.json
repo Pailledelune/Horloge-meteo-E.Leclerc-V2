@@ -1,0 +1,84 @@
+{
+  "name": "Horloge météo Leclerc V2",
+  "permissions": {
+    "network": "Récupère la météo (température, temps et alertes) sur api.open-meteo.com"
+  },
+  "options": [
+    {
+      "title": "Horloge",
+      "type": "section"
+    },
+    {
+      "title": "Afficher la trotteuse (aiguille des secondes)",
+      "name": "trotteuse",
+      "type": "boolean",
+      "default": true
+    },
+    {
+      "title": "Afficher l'horloge digitale",
+      "name": "horloge_digitale",
+      "type": "boolean",
+      "default": true,
+      "info": "Heure en chiffres LED rouges, en bas à droite"
+    },
+    {
+      "title": "Météo",
+      "type": "section",
+      "intro": "Mise à jour toutes les 15 minutes depuis Open-Meteo. Par défaut : Sarrebourg."
+    },
+    {
+      "title": "Latitude",
+      "name": "latitude",
+      "type": "float",
+      "default": 48.7347,
+      "hint": "Sarrebourg : 48.7347"
+    },
+    {
+      "title": "Longitude",
+      "name": "longitude",
+      "type": "float",
+      "default": 7.0539,
+      "hint": "Sarrebourg : 7.0539"
+    },
+    {
+      "title": "Alertes météo",
+      "name": "alertes",
+      "type": "select",
+      "options": [
+        ["auto", "Automatiques (selon les prévisions des 24 h)"],
+        ["off", "Désactivées"],
+        ["manuelle", "Manuelle (alerte choisie ci-dessous)"]
+      ],
+      "default": "auto",
+      "hint": "Automatiques : orages, rafales de 80 km/h ou plus (tempête dès 100 km/h), risque de verglas, neige modérée ou forte."
+    },
+    {
+      "title": "Alerte manuelle",
+      "name": "alerte_manuelle",
+      "type": "select",
+      "options": [
+        ["verglas", "Verglas"],
+        ["orages", "Orages"],
+        ["vent", "Vent violent"],
+        ["tempete", "Tempête"],
+        ["neige", "Neige"],
+        ["brouillard", "Brouillard"],
+        ["canicule", "Canicule"],
+        ["grand_froid", "Grand froid"]
+      ],
+      "default": "verglas",
+      "hint": "Utilisée seulement quand « Alertes météo » est sur Manuelle."
+    },
+    {
+      "title": "Message",
+      "type": "section"
+    },
+    {
+      "title": "Texte du cartouche en haut à droite",
+      "name": "message",
+      "type": "string",
+      "default": "",
+      "placeholder": "Laisser vide pour masquer le cartouche"
+    }
+  ]
+}
