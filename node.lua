@@ -662,9 +662,9 @@ end
 -- Cartouche blanc de taille fixe, colle au bord droit, coins gauches arrondis,
 -- centre entre le haut de l'ecran et le bandeau ; le texte bleu s'adapte
 -- (3 lignes au plus). Plusieurs messages actifs : un toutes les 8 secondes,
--- avec un fondu enchaine entre deux messages.
+-- avec un fondu rapide au blanc entre deux messages.
 local DUREE_MESSAGE = 8
-local FONDU_MESSAGE = 0.8
+local FONDU_MESSAGE = 0.25
 
 local function afficher_message(cote, bandeau_haut, jour)
   local actifs = messages_du_jour(jour)
@@ -688,14 +688,13 @@ local function afficher_message(cote, bandeau_haut, jour)
 
   local n = #actifs
   local tour = math.floor(sys.now() / DUREE_MESSAGE)
-  local t = (sys.now() - tour * DUREE_MESSAGE) / FONDU_MESSAGE
-  local actuel = actifs[tour % n + 1]
-  if n > 1 and t < 1 then
-    ecrire_message(actifs[(tour - 1) % n + 1], 1 - t)
-    ecrire_message(actuel, t)
-  else
-    ecrire_message(actuel, 1)
+  local s = sys.now() - tour * DUREE_MESSAGE
+  local a = 1
+  if n > 1 then
+    -- le texte s'efface vers le blanc en fin de tour, le suivant reapparait
+    a = math.min(1, s / FONDU_MESSAGE, (DUREE_MESSAGE - s) / FONDU_MESSAGE)
   end
+  ecrire_message(actifs[tour % n + 1], a)
 end
 
 ------------------------------------------------------------------------
