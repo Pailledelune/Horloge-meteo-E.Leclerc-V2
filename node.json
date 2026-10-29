@@ -19,7 +19,19 @@
       "name": "horloge_digitale",
       "type": "boolean",
       "default": true,
-      "info": "Heure en chiffres LED rouges, en bas à droite"
+      "info": "Heure en chiffres LED, en bas à droite"
+    },
+    {
+      "title": "Couleur des LED",
+      "name": "couleur_led",
+      "type": "select",
+      "options": [
+        ["rouge", "Rouge"],
+        ["blanc", "Blanc"],
+        ["vert", "Vert"],
+        ["bleu", "Bleu"]
+      ],
+      "default": "rouge"
     },
     {
       "title": "Météo",
@@ -70,15 +82,38 @@
       "hint": "Utilisée seulement quand « Alertes météo » est sur Manuelle."
     },
     {
-      "title": "Message",
-      "type": "section"
+      "title": "Messages",
+      "type": "section",
+      "intro": "Cartouche en haut à droite. Chaque message s'affiche du jour de début au jour de fin inclus ; une date vide = pas de limite. Plusieurs messages actifs le même jour s'affichent à tour de rôle (8 secondes chacun). Aucun message actif : le cartouche est masqué."
     },
     {
-      "title": "Texte du cartouche en haut à droite",
-      "name": "message",
-      "type": "string",
-      "default": "",
-      "placeholder": "Laisser vide pour masquer le cartouche"
+      "title": "Messages",
+      "name": "messages",
+      "type": "list",
+      "itemname": "Message",
+      "items": [
+        {
+          "title": "Texte",
+          "name": "texte",
+          "type": "string",
+          "default": "",
+          "placeholder": "BONNE JOURNÉE"
+        },
+        {
+          "title": "Début d'affichage",
+          "name": "debut",
+          "type": "date",
+          "default": "utc-now",
+          "allow_empty": true
+        },
+        {
+          "title": "Fin d'affichage",
+          "name": "fin",
+          "type": "date",
+          "default": "",
+          "allow_empty": true
+        }
+      ]
     }
   ]
 }

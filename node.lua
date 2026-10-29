@@ -60,11 +60,12 @@ local shader_disque = resource.create_shader[[
   uniform float flou;
   uniform float r, g, b;
   uniform float ox, oy, rc;
+  uniform float opacite;
   void main() {
     vec2 p = (TexCoord - vec2(0.5)) * 2.0;
     float a = 1.0 - smoothstep(1.0 - flou, 1.0, length(p));
     a *= smoothstep(rc - flou, rc, length(p - vec2(ox, oy)));
-    gl_FragColor = texture2D(Texture, TexCoord) * vec4(r, g, b, a);
+    gl_FragColor = texture2D(Texture, TexCoord) * vec4(r, g, b, a * opacite);
   }
 ]]
 
@@ -83,9 +84,10 @@ local shader_fond = resource.create_shader[[
   }
 ]]
 
--- Chiffre d'afficheur LED 7 segments : segments biseautes, inclines, rouges.
--- Unites internes : chiffre de 20 x 40, segments de 4.4 d'epaisseur.
-local LED_X0, LED_XW, LED_Y0, LED_YH = -3.0, 31.6, -3.0, 46.0   -- zone dessinee autour du chiffre
+-- Chiffre d'afficheur LED 7 segments : segments biseautes, inclines, avec un
+-- halo autour des segments allumes. Unites internes : chiffre de 20 x 40,
+-- segments de 4.4 d'epaisseur ; la zone dessinee deborde pour le halo.
+local LED_X0, LED_XW, LED_Y0, LED_YH = -9.0, 44.6, -9.0, 58.0
 local shader_chiffre = resource.create_shader[[
   #ifdef GL_ES
   precision mediump float;
@@ -94,30 +96,35 @@ local shader_chiffre = resource.create_shader[[
   varying vec2 TexCoord;
   uniform float sa, sb, sc, sd, se, sf, sg;   // 1 = segment allume
   uniform float px;                           // taille d'un pixel en unites
+  uniform float r_on, g_on, b_on;             // couleur des segments allumes
+  uniform float r_off, g_off, b_off;          // couleur des segments eteints
   const float W = 20.0;
   const float H = 40.0;
   const float T = 4.4;
   const float G = 1.1;
   const float K = 0.14;                       // inclinaison (environ 8 degres)
+  const float HALO = 0.5;                     // intensite du halo
+  const float PORTEE = 2.0;                   // etalement du halo, en unites
 
   float couvre(float d) { return clamp(d / px + 0.5, 0.0, 1.0); }
 
+  // Distance signee au segment : positive dedans, negative dehors
   float hseg(vec2 p, vec2 o) {
     vec2 q = p - o;
     float L = W - 2.0 * G;
     float demi = min(T * 0.5, min(q.x, L - q.x));
-    return couvre(demi - abs(q.y));
+    return demi - abs(q.y);
   }
 
   float vseg(vec2 p, vec2 o) {
     vec2 q = p - o;
     float L = H * 0.5 - 2.0 * G;
     float demi = min(T * 0.5, min(q.y, L - q.y));
-    return couvre(demi - abs(q.x));
+    return demi - abs(q.x);
   }
 
   void main() {
-    vec2 p = vec2(-3.0 + TexCoord.x * 31.6, -3.0 + TexCoord.y * 46.0);
+    vec2 p = vec2(-9.0 + TexCoord.x * 44.6, -9.0 + TexCoord.y * 58.0);
     p.x -= (H - p.y) * K;
     float a = hseg(p, vec2(G, 0.0));
     float g = hseg(p, vec2(G, H * 0.5));
@@ -126,13 +133,27 @@ local shader_chiffre = resource.create_shader[[
     float b = vseg(p, vec2(W, G));
     float e = vseg(p, vec2(0.0, H * 0.5 + G));
     float c = vseg(p, vec2(W, H * 0.5 + G));
-    float tout    = max(max(max(a, b), max(c, d)), max(max(e, f), g));
-    float allume  = max(max(max(a * sa, b * sb), max(c * sc, d * sd)),
-                        max(max(e * se, f * sf), g * sg));
-    vec3 eteint = vec3(0.124, 0.039, 0.035);
-    vec3 rouge  = vec3(1.00, 0.165, 0.10);
-    vec3 col = mix(eteint, rouge, allume / max(tout, 0.001));
-    gl_FragColor = texture2D(Texture, TexCoord) * vec4(col, tout);
+
+    // Distance au segment le plus proche, et au segment allume le plus proche
+    float d_tout = max(max(max(a, b), max(c, d)), max(max(e, f), g));
+    float d_lum = mix(-99.0, a, sa);
+    d_lum = max(d_lum, mix(-99.0, b, sb));
+    d_lum = max(d_lum, mix(-99.0, c, sc));
+    d_lum = max(d_lum, mix(-99.0, d, sd));
+    d_lum = max(d_lum, mix(-99.0, e, se));
+    d_lum = max(d_lum, mix(-99.0, f, sf));
+    d_lum = max(d_lum, mix(-99.0, g, sg));
+
+    float tout   = couvre(d_tout);
+    float allume = couvre(d_lum);
+    vec3 on  = vec3(r_on, g_on, b_on);
+    vec3 off = vec3(r_off, g_off, b_off);
+    vec3 col = mix(off, on, allume / max(tout, 0.001));
+
+    float halo  = HALO * exp(min(d_lum, 0.0) / PORTEE) * (1.0 - tout);
+    float alpha = tout + halo;
+    vec3 rgb = (col * tout + on * halo) / max(alpha, 0.001);
+    gl_FragColor = texture2D(Texture, TexCoord) * vec4(rgb, alpha);
   }
 ]]
 
@@ -181,14 +202,28 @@ local trotteuse = true
 local horloge_digitale = true
 local mode_alerte = "auto"
 local alerte_manuelle = "verglas"
-local message = ""
+local couleur_led = "rouge"
+local messages = {}              -- {texte =, debut = "AAAA-MM-JJ" ou nil, fin = ...}
+
+-- Date d'un reglage info-beamer ({value = "AAAA-MM-JJ", ...}) ; nil si vide
+local function date_reglage(v)
+  if type(v) == "table" then v = v.value end
+  if type(v) == "string" and v:match("^%d%d%d%d%-%d%d%-%d%d$") then return v end
+  return nil
+end
 
 util.json_watch("config.json", function(config)
   if config.trotteuse ~= nil then trotteuse = config.trotteuse end
   if config.horloge_digitale ~= nil then horloge_digitale = config.horloge_digitale end
   mode_alerte     = config.alertes or "auto"
   alerte_manuelle = config.alerte_manuelle or "verglas"
-  message         = config.message or ""
+  couleur_led     = config.couleur_led or "rouge"
+  messages = {}
+  for _, m in ipairs(type(config.messages) == "table" and config.messages or {}) do
+    if type(m.texte) == "string" and m.texte:find("%S") then
+      messages[#messages + 1] = {texte = m.texte, debut = date_reglage(m.debut), fin = date_reglage(m.fin)}
+    end
+  end
 end)
 
 -- Meteo ecrite par le service (meteo.json), absente au premier demarrage
@@ -222,12 +257,14 @@ local function decalage(utc)
 end
 
 -- coupe = {dx, dy, rayon} en fractions du rayon (disque retire)
-local function disque(cx, cy, rayon, c, coupe)
+-- opacite et flou (fraction du rayon) servent aux halos ; par defaut disque net
+local function disque(cx, cy, rayon, c, coupe, opacite, flou)
   coupe = coupe or {0, 0, 0}
   shader_disque:use{
-    flou = 1.5 / rayon,
+    flou = flou or 1.5 / rayon,
     r = c[1], g = c[2], b = c[3],
     ox = coupe[1], oy = coupe[2], rc = coupe[3],
+    opacite = opacite or 1,
   }
   tex_blanc:draw(cx - rayon, cy - rayon, cx + rayon, cy + rayon)
   shader_disque:deactivate()
@@ -365,8 +402,13 @@ local SEGMENTS = {
   ["0"] = "abcdef", ["1"] = "bc",    ["2"] = "abged", ["3"] = "abgcd",   ["4"] = "fgbc",
   ["5"] = "afgcd",  ["6"] = "afgedc", ["7"] = "abc",  ["8"] = "abcdefg", ["9"] = "abcfgd",
 }
-local LED_ROUGE  = {1.00, 0.165, 0.10}
-local LED_ETEINT = {0.124, 0.039, 0.035}   -- a garder identique a "eteint" dans shader_chiffre
+-- Couleur des LED (reglable dans info-beamer) : segment allume, segment eteint
+local LED_COULEURS = {
+  rouge = {{1.00, 0.165, 0.10}, {0.124, 0.039, 0.035}},
+  blanc = {{0.96, 0.97, 1.00},  {0.11, 0.11, 0.12}},
+  vert  = {{0.17, 1.00, 0.35},  {0.03, 0.13, 0.06}},
+  bleu  = {{0.00, 0.62, 1.00},  {0.02, 0.07, 0.15}},
+}
 local LED_FOND   = {0.04, 0.04, 0.04}
 local LED_PENTE  = 0.14
 local LED_LARGEUR = 4 * 20 + 3 * 8 + 14 + 40 * LED_PENTE   -- en unites
@@ -374,9 +416,14 @@ local LED_HAUTEUR = 40
 local LED_MARGE   = 7
 
 -- Chiffre dont le coin haut gauche est en (x, y), s = pixels par unite
-local function chiffre_led(ch, x, y, s)
+local function chiffre_led(ch, x, y, s, couleurs)
   local on = SEGMENTS[ch]
-  local u = {px = 1 / s}
+  local c_on, c_off = couleurs[1], couleurs[2]
+  local u = {
+    px = 1 / s,
+    r_on = c_on[1], g_on = c_on[2], b_on = c_on[3],
+    r_off = c_off[1], g_off = c_off[2], b_off = c_off[3],
+  }
   for seg in ("abcdefg"):gmatch(".") do
     u["s" .. seg] = on:find(seg) and 1 or 0
   end
@@ -411,14 +458,21 @@ local function afficheur_led(heure, x1, y1, x2, y2, s, deux_points)
   local x = x1 + LED_MARGE * s
   local y = y1 + LED_MARGE * s
 
-  chiffre_led(heure:sub(1, 1), x,          y, s)
-  chiffre_led(heure:sub(2, 2), x + 28 * s, y, s)
-  chiffre_led(heure:sub(4, 4), x + 70 * s, y, s)
-  chiffre_led(heure:sub(5, 5), x + 98 * s, y, s)
+  local couleurs = LED_COULEURS[couleur_led] or LED_COULEURS.rouge
+  chiffre_led(heure:sub(1, 1), x,          y, s, couleurs)
+  chiffre_led(heure:sub(2, 2), x + 28 * s, y, s, couleurs)
+  chiffre_led(heure:sub(4, 4), x + 70 * s, y, s, couleurs)
+  chiffre_led(heure:sub(5, 5), x + 98 * s, y, s, couleurs)
 
-  local c = deux_points and LED_ROUGE or LED_ETEINT
+  -- Deux-points : allume (avec son halo) une seconde sur deux
   for _, py in ipairs{13, 29} do
-    disque(x + (59 + (40 - py) * LED_PENTE) * s, y + py * s, 2.6 * s, c)
+    local px, pyy = x + (59 + (40 - py) * LED_PENTE) * s, y + py * s
+    if deux_points then
+      disque(px, pyy, 7 * s, couleurs[1], nil, 0.35, 1.0)
+      disque(px, pyy, 2.6 * s, couleurs[1])
+    else
+      disque(px, pyy, 2.6 * s, couleurs[2])
+    end
   end
 end
 
@@ -571,31 +625,62 @@ local function couper(texte, taille, largeur)
   return lignes
 end
 
--- Cartouche blanc colle au bord droit, coins gauches arrondis, texte bleu ;
--- centre verticalement entre le haut de l'ecran et le bandeau
-local function afficher_message(cote, bandeau_haut)
-  if not message:find("%S") then return end
+-- Messages actifs a la date du jour ("AAAA-MM-JJ"), dans l'ordre de la liste
+local function messages_du_jour(jour)
+  local actifs = {}
+  for _, m in ipairs(messages) do
+    if (not m.debut or m.debut <= jour) and (not m.fin or jour <= m.fin) then
+      actifs[#actifs + 1] = m.texte
+    end
+  end
+  return actifs
+end
 
-  local larg   = cote * 0.97
-  local x      = WIDTH - larg
-  local pad    = HEIGHT * 0.025
-  local h_max  = bandeau_haut - 2 * HEIGHT * 0.035
+-- Decoupage du texte, calcule une fois par message et par taille de cartouche
+local mise_en_page_messages = {}
+
+local function mise_en_page_message(texte, larg, haut, pad)
+  local cle = texte .. "|" .. larg .. "|" .. haut
+  local m = mise_en_page_messages[cle]
+  if m then return m end
   local taille = HEIGHT * 0.10
   local lignes
-  for _ = 1, 20 do
-    lignes = couper(message, taille, larg - 2 * pad)
+  for _ = 1, 30 do
+    lignes = couper(texte, taille, larg - 2 * pad)
     local plus_large = 0
     for _, l in ipairs(lignes) do plus_large = math.max(plus_large, font:width(l, taille)) end
-    local hauteur = #lignes * taille * 1.15 + 2 * pad
-    if #lignes <= 3 and plus_large <= larg - 2 * pad and hauteur <= h_max then break end
+    if #lignes <= 3 and plus_large <= larg - 2 * pad and #lignes * taille * 1.15 <= haut - 2 * pad then
+      break
+    end
     taille = taille * 0.92
   end
+  m = {lignes = lignes, taille = taille}
+  mise_en_page_messages[cle] = m
+  return m
+end
 
-  local hauteur = #lignes * taille * 1.15 + 2 * pad
-  local y = (bandeau_haut - hauteur) / 2
-  cartouche_gauche(x, y, WIDTH, y + hauteur, BLANC, math.min(hauteur * 0.18, HEIGHT * 0.04))
-  for i, l in ipairs(lignes) do
-    centre(l, x + larg / 2, y + pad + (i - 0.5) * taille * 1.15, taille, BLEU)
+-- Cartouche blanc de taille fixe, colle au bord droit, coins gauches arrondis,
+-- centre entre le haut de l'ecran et le bandeau ; le texte bleu s'adapte
+-- (3 lignes au plus). Plusieurs messages actifs : un toutes les 8 secondes.
+local DUREE_MESSAGE = 8
+
+local function afficher_message(cote, bandeau_haut, jour)
+  local actifs = messages_du_jour(jour)
+  if #actifs == 0 then return end
+  local texte = actifs[math.floor(sys.now() / DUREE_MESSAGE) % #actifs + 1]
+
+  local larg = cote * 0.97
+  local x    = WIDTH - larg
+  local pad  = HEIGHT * 0.025
+  local y    = HEIGHT * 0.035
+  local haut = bandeau_haut - 2 * y
+  cartouche_gauche(x, y, WIDTH, y + haut, BLANC, math.min(haut * 0.18, HEIGHT * 0.04))
+
+  local m = mise_en_page_message(texte, larg, haut, pad)
+  local bloc = #m.lignes * m.taille * 1.15
+  local y0 = y + (haut - bloc) / 2
+  for i, l in ipairs(m.lignes) do
+    centre(l, x + larg / 2, y0 + (i - 0.5) * m.taille * 1.15, m.taille, BLEU)
   end
 end
 
@@ -631,7 +716,7 @@ function node.render()
 
   -- Haut : alerte a gauche, message a droite
   afficher_alerte(cote / 2, cote, haut_max)
-  afficher_message(cote, bandeau_haut)
+  afficher_message(cote, bandeau_haut, string.format("%04d-%02d-%02d", d.year, d.month, d.day))
 
   cadran(cx, cy, R)
   logo_cadran(cx, cy, R)
